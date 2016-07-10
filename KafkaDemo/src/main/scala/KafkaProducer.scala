@@ -1,29 +1,29 @@
 import java.util.Properties
-import org.apache.kafka.clients.producer.{ProducerRecord, KafkaProducer => ApacheKafkaProducer}
+import org.apache.kafka.clients.producer.{KafkaProducer => ApacheKafkaProducer, RecordMetadata, Callback, ProducerRecord}
+import scalaz.{-\/, \/-, \/}
 import scalaz.concurrent.Task
 
 class KafkaProducer extends Producer {
 
-  override def send[A](content: A)(implicit serializer: Serializer[A]): Task[Unit] = {
-    val properties = getProperties
-    val message = serializer.serialize(content)
+  override def send[K, V](key: K, content: V)(implicit config: KafkaProducerConfig): Task[Unit] = {
+    val props = new Properties()
+    props.put("bootstrap.servers", config.servers)
+    props.put("key.serializer", config.keySerializer.runtimeClass)
+    props.put("value.serializer", config.valueSerializer.runtimeClass)
+    props.put("partitioner.class", config.partitioner.runtimeClass)
 
-    val producer = new ApacheKafkaProducer[String, String](properties)
+    val producer = new ApacheKafkaProducer[K, V](props)
     val t = System.currentTimeMillis()
-    val data = new ProducerRecord[String, String]("topic3", 0, t, "test", message)
-    val futureRecord = producer.send(data)
+    val data = new ProducerRecord[K, V](config.topic, 0, t, key, content)
 
     //TODO: specify timeout -> load it from the app config
-    Task { futureRecord.get() }
-  }
-
-  def getProperties: Properties = {
-    //TODO: load properties from application.conf using typesafe config
-    val props = new Properties()
-    props.put("bootstrap.servers", "192.168.1.11:32768")
-    props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer")
-    props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
-    props.put("partitioner.class", "org.apache.kafka.clients.producer.internals.DefaultPartitioner")
-    props
+    Task.async(k => producer.send(data, new Callback {
+      override def onCompletion(recordMetadata: RecordMetadata, e: Exception): Unit = {
+        e match {
+          case null => k.apply(\/-())
+          case _ => k.apply(-\/(e))
+        }
+      }
+    }))
   }
 }
