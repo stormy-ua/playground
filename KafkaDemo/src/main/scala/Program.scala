@@ -9,11 +9,11 @@ object Program {
 
     //TODO: load properties from application.conf using typesafe config
     implicit val config = new KafkaProducerConfig(
-      "192.168.1.11:32769",
-      "topic3",
-      classTag[StringSerializer],
-      classTag[StringSerializer],
-      classTag[DefaultPartitioner]
+      "192.168.1.11:32768",
+      "test",
+      "org.apache.kafka.common.serialization.StringSerializer",
+      "org.apache.kafka.common.serialization.StringSerializer",
+      "org.apache.kafka.clients.producer.internals.DefaultPartitioner"
     )
 
     while(true){
